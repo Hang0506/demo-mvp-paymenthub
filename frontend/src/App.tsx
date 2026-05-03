@@ -12,7 +12,13 @@ import TransactionsPage from './pages/portal/TransactionsPage'
 
 function App() {
   return (
-    <ConfigProvider theme={{ token: { colorPrimary: '#1890ff' } }}>
+    <ConfigProvider theme={{
+      token: {
+        colorPrimary: '#667eea',
+        borderRadius: 8,
+        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+      },
+    }}>
       <Routes>
         {/* Portal */}
         <Route path="/portal" element={<PortalLayout />}>

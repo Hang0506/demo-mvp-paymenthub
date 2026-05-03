@@ -1,143 +1,162 @@
 import React, { useEffect, useState } from 'react'
 import { useSearchParams, useNavigate, useParams } from 'react-router-dom'
-import { Card, Result, Button, Spin, Typography, Descriptions } from 'antd'
+import { Button, Spin, Typography } from 'antd'
+import { CheckCircleFilled, CloseCircleFilled, SyncOutlined, ArrowLeftOutlined } from '@ant-design/icons'
 import { getPaymentStatus } from '../services/paymentService'
 
 const { Text } = Typography
 
 const PaymentResult: React.FC = () => {
-  const [searchParams] = useSearchParams()
+  const [searchParams]  = useSearchParams()
   const { paymentCode } = useParams<{ paymentCode: string }>()
-  const navigate = useNavigate()
-  const [loading, setLoading] = useState(true)
+  const navigate        = useNavigate()
+  const [loading, setLoading]             = useState(true)
   const [paymentStatus, setPaymentStatus] = useState<any>(null)
 
-  // ZaloPay return params
-  const zpStatus   = searchParams.get('status')      // "1" = success, "-1" = fail
-  const appTransId = searchParams.get('apptransid')
-  const amount     = searchParams.get('amount')
-  const checksum   = searchParams.get('checksum')
-
-  // Internal params (navigate từ code)
+  const zpStatus       = searchParams.get('status')
+  const appTransId     = searchParams.get('apptransid')
   const internalStatus = searchParams.get('status')
-  const transactionId  = searchParams.get('transactionId')
-
-  const isZaloPayReturn = !!appTransId && !!checksum
+  const isZaloPayReturn = !!appTransId && !!searchParams.get('checksum')
 
   useEffect(() => {
     const init = async () => {
       try {
         if (paymentCode) {
-          // Backend đã xử lý khi redirect từ /zalopay-return — chỉ cần lấy status
           const status = await getPaymentStatus(paymentCode)
           setPaymentStatus(status)
-
-          // Nếu thanh toán thành công và có returnUrl → redirect về merchant
-          // Append paymentCode để merchant biết đơn hàng nào
           if (status?.status === 'PAID' && status?.returnUrl) {
-            const separator = status.returnUrl.includes('?') ? '&' : '?'
-            const redirectTarget = `${status.returnUrl}${separator}paymentCode=${paymentCode}&status=success`
-            // Delay nhỏ để user thấy kết quả trước khi redirect
-            setTimeout(() => {
-              window.location.href = redirectTarget
-            }, 2000)
+            const sep = status.returnUrl.includes('?') ? '&' : '?'
+            setTimeout(() => { window.location.href = `${status.returnUrl}${sep}paymentCode=${paymentCode}&status=success` }, 2500)
           }
         }
-      } catch {
-        // ignore
-      } finally {
-        setLoading(false)
-      }
+      } catch {}
+      finally { setLoading(false) }
     }
     init()
   }, [])
 
   const resolveResult = (): 'success' | 'failed' | 'pending' => {
-    if (isZaloPayReturn) {
-      if (zpStatus === '1') return 'success'
-      if (zpStatus === '-1') return 'failed'
-      return 'pending'
-    }
+    if (isZaloPayReturn) return zpStatus === '1' ? 'success' : zpStatus === '-1' ? 'failed' : 'pending'
     if (internalStatus === 'success') return 'success'
-    if (internalStatus === 'failed') return 'failed'
-    if (paymentStatus?.status === 'PAID') return 'success'
+    if (internalStatus === 'failed')  return 'failed'
+    if (paymentStatus?.status === 'PAID')   return 'success'
     if (paymentStatus?.status === 'FAILED') return 'failed'
     return 'pending'
   }
 
   const result = resolveResult()
 
-  const configs = {
-    success: { status: 'success' as const, title: 'Thanh toán thành công!', subTitle: paymentStatus?.returnUrl ? 'Giao dịch đã được xử lý thành công. Đang chuyển về trang merchant...' : 'Giao dịch đã được xử lý thành công.' },
-    failed:  { status: 'error'   as const, title: 'Thanh toán thất bại!',   subTitle: 'Giao dịch không thể hoàn thành. Vui lòng thử lại.' },
-    pending: { status: 'info'    as const, title: 'Đang xử lý...',          subTitle: 'Giao dịch đang được xử lý. Vui lòng đợi.' },
+  const CONFIGS = {
+    success: {
+      icon: <CheckCircleFilled style={{ fontSize: 64, color: '#16a34a' }} />,
+      title: 'Thanh toán thành công!',
+      sub: paymentStatus?.returnUrl ? 'Đang chuyển về trang đơn hàng...' : 'Giao dịch đã được xử lý.',
+      bg: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
+      border: '#86efac',
+    },
+    failed: {
+      icon: <CloseCircleFilled style={{ fontSize: 64, color: '#dc2626' }} />,
+      title: 'Thanh toán thất bại',
+      sub: 'Giao dịch không thể hoàn thành. Vui lòng thử lại.',
+      bg: 'linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%)',
+      border: '#fca5a5',
+    },
+    pending: {
+      icon: <SyncOutlined spin style={{ fontSize: 64, color: '#667eea' }} />,
+      title: 'Đang xử lý...',
+      sub: 'Giao dịch đang được xác nhận.',
+      bg: 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)',
+      border: '#c4b5fd',
+    },
   }
-  const cfg = configs[result]
+
+  const cfg = CONFIGS[result]
 
   if (loading) {
     return (
-      <div className="payment-container">
-        <Card>
-          <div style={{ textAlign: 'center', padding: '50px' }}>
-            <Spin size="large" />
-            <div style={{ marginTop: '16px' }}>
-              <Text>Đang xác nhận kết quả thanh toán...</Text>
-            </div>
-          </div>
-        </Card>
+      <div className="payment-wrapper">
+        <div style={{ textAlign: 'center', color: '#fff' }}>
+          <Spin size="large" />
+          <div style={{ marginTop: 16, opacity: 0.8 }}>Đang xác nhận...</div>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="payment-container">
-      <Card>
-        <Result
-          status={cfg.status}
-          title={cfg.title}
-          subTitle={cfg.subTitle}
-          extra={[
-            <Button type="primary" key="home" onClick={() => navigate('/')}>
-              Về trang chủ
-            </Button>,
-            result === 'failed' && (
-              <Button key="retry" onClick={() => window.history.back()}>
+    <div className="payment-wrapper">
+      <div className="payment-card">
+        {/* Header */}
+        <div className="payment-header">
+          <div className="payment-header-logo">💳 Payment Hub</div>
+          <div className="payment-header-sub" style={{ opacity: 0.8 }}>Kết quả giao dịch</div>
+        </div>
+
+        {/* Result */}
+        <div style={{ padding: '32px 28px 28px', textAlign: 'center' }}>
+          <div style={{
+            width: 100, height: 100, borderRadius: '50%',
+            background: cfg.bg, border: `2px solid ${cfg.border}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            margin: '0 auto 20px',
+          }}>
+            {cfg.icon}
+          </div>
+
+          <div style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}>
+            {cfg.title}
+          </div>
+          <Text style={{ color: '#64748b', fontSize: 14 }}>{cfg.sub}</Text>
+
+          {/* Amount */}
+          {paymentStatus?.paidAmount > 0 && (
+            <div style={{
+              margin: '20px 0',
+              padding: '16px',
+              background: '#f8fafc',
+              borderRadius: 12,
+              border: '1px solid #e2e8f0',
+            }}>
+              <Text style={{ color: '#94a3b8', fontSize: 12, display: 'block', marginBottom: 4 }}>Số tiền đã thanh toán</Text>
+              <div style={{ fontSize: 28, fontWeight: 700, color: '#0f172a' }}>
+                {paymentStatus.paidAmount.toLocaleString()}₫
+              </div>
+              <Text style={{ color: '#94a3b8', fontSize: 12 }}>Mã: {paymentCode}</Text>
+            </div>
+          )}
+
+          {/* Actions */}
+          <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
+            {result === 'failed' && (
+              <Button
+                size="large"
+                icon={<ArrowLeftOutlined />}
+                onClick={() => window.history.back()}
+                style={{ flex: 1, borderRadius: 10, height: 46 }}
+              >
                 Thử lại
               </Button>
-            ),
-          ].filter(Boolean)}
-        />
+            )}
+            <Button
+              type="primary"
+              size="large"
+              onClick={() => navigate('/')}
+              style={{
+                flex: 1, height: 46, borderRadius: 10,
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                border: 'none',
+              }}
+            >
+              Về trang chủ
+            </Button>
+          </div>
 
-        <Descriptions
-          bordered
-          size="small"
-          column={1}
-          style={{ marginTop: 24, maxWidth: 480, margin: '24px auto 0' }}
-        >
-          {paymentCode && (
-            <Descriptions.Item label="Mã thanh toán">{paymentCode}</Descriptions.Item>
-          )}
-          {appTransId && (
-            <Descriptions.Item label="Mã GD ZaloPay">{appTransId}</Descriptions.Item>
-          )}
-          {amount && (
-            <Descriptions.Item label="Số tiền">
-              {parseInt(amount).toLocaleString()} VND
-            </Descriptions.Item>
-          )}
-          {transactionId && (
-            <Descriptions.Item label="Transaction ID">{transactionId}</Descriptions.Item>
-          )}
-          {paymentStatus?.paidAmount != null && (
-            <Descriptions.Item label="Đã thanh toán">
-              {paymentStatus.paidAmount.toLocaleString()} VND
-            </Descriptions.Item>
-          )}
-          {paymentStatus?.status && (
-            <Descriptions.Item label="Trạng thái DB">{paymentStatus.status}</Descriptions.Item>
-          )}
-        </Descriptions>
-      </Card>
+          {/* Security */}
+          <Text style={{ color: '#cbd5e1', fontSize: 11, display: 'block', marginTop: 16 }}>
+            🔒 Giao dịch được bảo mật bởi Payment Hub
+          </Text>
+        </div>
+      </div>
     </div>
   )
 }
