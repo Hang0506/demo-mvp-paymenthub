@@ -310,8 +310,9 @@ public class PaymentAppService : ApplicationService, IPaymentAppService
         var transaction = await _transactionRepository.GetAsync(t => t.PaymentRequestCode == paymentCode);
         var splits = await _paymentSplitRepository.GetListAsync(s => s.TransactionId == transaction.Id);
 
-        var allCaptured  = splits.Count > 0 && splits.All(s => s.State == TransactionState.Captured);
-        var allRefunded  = splits.Count > 0 && splits.All(s => s.State == TransactionState.Refunded);
+        var totalCaptured = splits.Where(s => s.State == TransactionState.Captured).Sum(s => s.Amount);
+        var allCaptured  = splits.Count > 0 && totalCaptured >= transaction.Amount;
+        var allRefunded  = splits.Count > 0 && splits.Where(s => s.State != TransactionState.Failed).All(s => s.State == TransactionState.Refunded);
         var anyRefunded  = splits.Any(s => s.State == TransactionState.Refunded);
         var anyFailed    = splits.Any(s => s.State == TransactionState.Failed);
         var anyPending   = splits.Any(s => s.State == TransactionState.PendingAuthorize || s.State == TransactionState.Created);
@@ -355,8 +356,9 @@ public class PaymentAppService : ApplicationService, IPaymentAppService
         foreach (var txn in transactions)
         {
             var splits = await _paymentSplitRepository.GetListAsync(s => s.TransactionId == txn.Id);
-            var allCaptured = splits.Count > 0 && splits.All(s => s.State == TransactionState.Captured);
-            var allRefunded = splits.Count > 0 && splits.All(s => s.State == TransactionState.Refunded);
+            var totalCaptured = splits.Where(s => s.State == TransactionState.Captured).Sum(s => s.Amount);
+            var allCaptured = splits.Count > 0 && totalCaptured >= txn.Amount;
+            var allRefunded = splits.Count > 0 && splits.Where(s => s.State != TransactionState.Failed).All(s => s.State == TransactionState.Refunded);
             var anyRefunded = splits.Any(s => s.State == TransactionState.Refunded);
             var anyFailed   = splits.Any(s => s.State == TransactionState.Failed);
             var anyPending  = splits.Any(s => s.State == TransactionState.PendingAuthorize || s.State == TransactionState.Created);

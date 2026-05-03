@@ -79,12 +79,14 @@ public class WebhookAppService : ApplicationService, IWebhookAppService
 
             // Check if all splits captured → mark transaction PAID
             var allSplits = await _splitRepository.GetListAsync(s => s.TransactionId == split.TransactionId);
-            if (allSplits.All(s => s.State == TransactionState.Captured))
+            var transaction = await _transactionRepository.GetAsync(split.TransactionId);
+            var capturedAmount = allSplits.Where(s => s.State == TransactionState.Captured).Sum(s => s.Amount);
+
+            if (capturedAmount >= transaction.Amount)
             {
-                var transaction = await _transactionRepository.GetAsync(split.TransactionId);
                 transaction.UpdateState(TransactionState.Captured);
                 await _transactionRepository.UpdateAsync(transaction);
-                Logger.LogInformation("Transaction {Code} marked as PAID", transaction.PaymentRequestCode);
+                Logger.LogInformation("Transaction {Code} marked as PAID (capturedAmount={Amount})", transaction.PaymentRequestCode, capturedAmount);
 
                 // Notify tenant webhook
                 await NotifyTenantAsync(transaction, allSplits);
