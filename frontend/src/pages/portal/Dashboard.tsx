@@ -1,37 +1,124 @@
-import { Card, Row, Col, Statistic, Typography, Timeline, Tag, Button } from 'antd'
+import { Card, Row, Col, Statistic, Typography, Timeline, Tag, Button, Spin } from 'antd'
 import {
   TeamOutlined,
   CreditCardOutlined,
   CheckCircleOutlined,
   ThunderboltOutlined,
   SettingOutlined,
+  DollarOutlined,
+  SyncOutlined,
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import axios from 'axios'
 
 const { Title, Text } = Typography
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const [stats, setStats] = useState({
+    tenants: 0,
+    paymentMethods: 0,
+    providers: 0,
+    totalTxn: 0,
+    paidTxn: 0,
+    pendingTxn: 0,
+    totalAmount: 0,
+    paidAmount: 0,
+  })
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [tenantsRes, paymentsRes] = await Promise.all([
+          axios.get('/api/payment-tenants'),
+          axios.get('/api/payments'),
+        ])
+
+        const tenants: any[] = tenantsRes.data ?? []
+        const payments: any[] = paymentsRes.data ?? []
+
+        // Tổng hợp payment methods và providers từ tất cả tenants
+        let totalMethods = 0
+        let totalProviders = 0
+        await Promise.all(tenants.map(async (t: any) => {
+          try {
+            const [mRes, pRes] = await Promise.all([
+              axios.get(`/api/payment-tenants/${t.tenantId}/payment-methods`),
+              axios.get(`/api/payment-tenants/${t.tenantId}/providers`),
+            ])
+            totalMethods += (mRes.data?.length ?? 0)
+            totalProviders += (pRes.data?.length ?? 0)
+          } catch {}
+        }))
+
+        const paidTxn    = payments.filter((p: any) => p.status === 'PAID').length
+        const pendingTxn = payments.filter((p: any) => p.status === 'PENDING' || p.status === 'PARTIAL_PAID').length
+        const totalAmount = payments.reduce((s: number, p: any) => s + (p.amount ?? 0), 0)
+        const paidAmount  = payments.reduce((s: number, p: any) => s + (p.paidAmount ?? 0), 0)
+
+        setStats({
+          tenants: tenants.length,
+          paymentMethods: totalMethods,
+          providers: totalProviders,
+          totalTxn: payments.length,
+          paidTxn,
+          pendingTxn,
+          totalAmount,
+          paidAmount,
+        })
+      } catch {}
+      finally { setLoading(false) }
+    }
+    load()
+  }, [])
 
   return (
     <div>
-      {/* Stats */}
-      <Row gutter={16} style={{ marginBottom: 24 }}>
+      {/* Stats row 1 — Cấu hình */}
+      <Row gutter={16} style={{ marginBottom: 16 }}>
         {[
-          { title: 'Tenants', value: 8, icon: <TeamOutlined />, color: '#1890ff', suffix: 'active' },
-          { title: 'Payment Methods', value: 3, icon: <CreditCardOutlined />, color: '#52c41a', suffix: 'registered' },
-          { title: 'Providers', value: 2, icon: <CheckCircleOutlined />, color: '#722ed1', suffix: 'configured' },
-          { title: 'Avg Latency', value: 120, icon: <ThunderboltOutlined />, color: '#fa8c16', suffix: 'ms' },
+          { title: 'Tenants',          value: stats.tenants,        icon: <TeamOutlined />,        color: '#1890ff', suffix: 'active' },
+          { title: 'Payment Methods',  value: stats.paymentMethods, icon: <CreditCardOutlined />,  color: '#52c41a', suffix: 'registered' },
+          { title: 'Providers',        value: stats.providers,      icon: <CheckCircleOutlined />, color: '#722ed1', suffix: 'configured' },
+          { title: 'Đang xử lý',       value: stats.pendingTxn,     icon: <SyncOutlined spin={stats.pendingTxn > 0} />, color: '#fa8c16', suffix: 'giao dịch' },
         ].map(s => (
           <Col span={6} key={s.title}>
             <Card>
-              <Statistic
-                title={s.title}
-                value={s.value}
-                suffix={<Text type="secondary" style={{ fontSize: 13 }}>{s.suffix}</Text>}
-                prefix={<span style={{ color: s.color }}>{s.icon}</span>}
-                valueStyle={{ color: s.color }}
-              />
+              <Spin spinning={loading} size="small">
+                <Statistic
+                  title={s.title}
+                  value={s.value}
+                  suffix={<Text type="secondary" style={{ fontSize: 13 }}>{s.suffix}</Text>}
+                  prefix={<span style={{ color: s.color }}>{s.icon}</span>}
+                  valueStyle={{ color: s.color }}
+                />
+              </Spin>
+            </Card>
+          </Col>
+        ))}
+      </Row>
+
+      {/* Stats row 2 — Giao dịch */}
+      <Row gutter={16} style={{ marginBottom: 24 }}>
+        {[
+          { title: 'Tổng giao dịch', value: stats.totalTxn,                    icon: <ThunderboltOutlined />, color: '#595959', suffix: 'txn' },
+          { title: 'Đã thanh toán',  value: stats.paidTxn,                     icon: <CheckCircleOutlined />, color: '#52c41a', suffix: `/ ${stats.totalTxn}` },
+          { title: 'Tổng tiền',      value: stats.totalAmount.toLocaleString(), icon: <DollarOutlined />,      color: '#1890ff', suffix: '₫' },
+          { title: 'Đã thu',         value: stats.paidAmount.toLocaleString(),  icon: <DollarOutlined />,      color: '#52c41a', suffix: '₫' },
+        ].map(s => (
+          <Col span={6} key={s.title}>
+            <Card>
+              <Spin spinning={loading} size="small">
+                <Statistic
+                  title={s.title}
+                  value={s.value}
+                  suffix={<Text type="secondary" style={{ fontSize: 13 }}>{s.suffix}</Text>}
+                  prefix={<span style={{ color: s.color }}>{s.icon}</span>}
+                  valueStyle={{ color: s.color }}
+                />
+              </Spin>
             </Card>
           </Col>
         ))}
