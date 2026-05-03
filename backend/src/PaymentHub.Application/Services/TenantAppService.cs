@@ -115,8 +115,8 @@ public class TenantAppService : ApplicationService, ITenantAppService
         // Persist encrypted secrets + AppId/AppUser in ExtraConfig for restart resilience
         config.ExtraConfig = System.Text.Json.JsonSerializer.Serialize(new
         {
-            encryptedApiKey    = MockKmsService.Encrypt(request.ApiKey),
-            encryptedSecretKey = MockKmsService.Encrypt(request.SecretKey),
+            encryptedApiKey    = _kmsService.Encrypt(request.ApiKey),
+            encryptedSecretKey = _kmsService.Encrypt(request.SecretKey),
             appId              = request.MerchantId,
             appUser            = "PaymentHub",
         });

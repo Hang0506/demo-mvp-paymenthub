@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using PaymentHub.Entities;
 using Volo.Abp.Domain.Repositories;
@@ -15,22 +16,32 @@ namespace PaymentHub.Application.Services;
 /// - GetSecretAsync: đọc từ DB → AES-256 decrypt → trả về plaintext
 /// - Không dùng in-memory store → persist qua container restart
 /// 
+/// AES key/IV đọc từ appsettings.json (Kms:AesKey, Kms:AesIv) — KHÔNG hardcode.
 /// Production replacement: AWS KMS, Azure Key Vault, HashiCorp Vault
 /// </summary>
 public class MockKmsService : IKmsService
 {
-    private static readonly byte[] _aesKey = Encoding.UTF8.GetBytes("PaymentHub_KMS_MockKey_32bytes!!");
-    private static readonly byte[] _aesIv  = Encoding.UTF8.GetBytes("MockIV_16bytes!!");
+    private readonly byte[] _aesKey;
+    private readonly byte[] _aesIv;
 
     private readonly IRepository<ProviderConfig, Guid> _providerConfigRepository;
     private readonly ILogger<MockKmsService> _logger;
 
     public MockKmsService(
         IRepository<ProviderConfig, Guid> providerConfigRepository,
-        ILogger<MockKmsService> logger)
+        ILogger<MockKmsService> logger,
+        IConfiguration configuration)
     {
         _providerConfigRepository = providerConfigRepository;
         _logger = logger;
+
+        var rawKey = configuration["Kms:AesKey"]
+            ?? throw new InvalidOperationException("Kms:AesKey is not configured in appsettings.json");
+        var rawIv = configuration["Kms:AesIv"]
+            ?? throw new InvalidOperationException("Kms:AesIv is not configured in appsettings.json");
+
+        _aesKey = Encoding.UTF8.GetBytes(rawKey.PadRight(32).Substring(0, 32));
+        _aesIv  = Encoding.UTF8.GetBytes(rawIv.PadRight(16).Substring(0, 16));
     }
 
     /// <summary>
@@ -110,7 +121,7 @@ public class MockKmsService : IKmsService
 
     // ── AES-256 helpers ──────────────────────────────────────────────────────
 
-    public static string Encrypt(string plainText)
+    public string Encrypt(string plainText)
     {
         using var aes = Aes.Create();
         aes.Key = _aesKey;
@@ -120,7 +131,7 @@ public class MockKmsService : IKmsService
         return Convert.ToBase64String(encryptor.TransformFinalBlock(bytes, 0, bytes.Length));
     }
 
-    public static string Decrypt(string cipherBase64)
+    public string Decrypt(string cipherBase64)
     {
         using var aes = Aes.Create();
         aes.Key = _aesKey;

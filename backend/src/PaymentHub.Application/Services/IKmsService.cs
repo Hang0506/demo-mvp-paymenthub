@@ -24,4 +24,9 @@ public interface IKmsService
     /// Xóa secret khỏi KMS.
     /// </summary>
     Task DeleteSecretAsync(string kmsRef);
+
+    /// <summary>
+    /// Encrypt plaintext để lưu vào DB (dùng AES key từ config).
+    /// </summary>
+    string Encrypt(string plainText);
 }
