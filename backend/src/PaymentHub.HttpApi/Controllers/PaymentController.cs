@@ -55,18 +55,30 @@ public class PaymentController : AbpControllerBase
     }
 
     /// <summary>
-    /// ZaloPay return URL handler — được gọi khi user hoàn tất thanh toán trên ZaloPay
-    /// và được redirect về. Cập nhật trạng thái split dựa trên status param.
+    /// ZaloPay return URL handler — ZaloPay redirect browser về đây sau khi user thanh toán.
+    /// Payment Hub cập nhật trạng thái split, sau đó redirect tiếp về merchant ReturnUrl.
+    /// Flow: ZaloPay → POST /api/payments/{code}/zalopay-return → redirect → merchant app
     /// </summary>
-    [HttpPost("{paymentCode}/zalopay-return")]
-    public async Task<IActionResult> ZaloPayReturn(string paymentCode, [FromQuery] string? status, [FromQuery] string? apptransid, [FromQuery] string? checksum)
+    [HttpGet("{paymentCode}/zalopay-return")]
+    public async Task<IActionResult> ZaloPayReturn(
+        string paymentCode,
+        [FromQuery] string? status,
+        [FromQuery] string? apptransid,
+        [FromQuery] string? checksum)
     {
-        // status=1 là thành công theo ZaloPay docs
-        if (status == "1" && !string.IsNullOrEmpty(apptransid))
+        // Cập nhật trạng thái split nếu thành công (status=1)
+        string? merchantReturnUrl = null;
+        if (!string.IsNullOrEmpty(apptransid))
         {
-            await _paymentAppService.HandleZaloPayReturnAsync(paymentCode, apptransid, status);
+            merchantReturnUrl = await _paymentAppService.HandleZaloPayReturnAsync(
+                paymentCode, apptransid, status ?? "0");
         }
-        return Ok(new { received = true });
+
+        // Redirect về merchant app (hoặc Payment Hub frontend nếu không có merchant URL)
+        var redirectTo = merchantReturnUrl
+            ?? $"{Request.Scheme}://{Request.Host.Value.Replace("5000", "3000")}/payment/{paymentCode}/result";
+
+        return Redirect(redirectTo);
     }
 
     /// <summary>

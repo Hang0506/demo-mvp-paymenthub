@@ -242,12 +242,13 @@ public class PaymentAppService : ApplicationService, IPaymentAppService
                     var providerConfig = await _providerConfigRepository.FirstOrDefaultAsync(
                         p => p.TenantId == transaction.TenantId && p.ProviderId == "ZALOPAY");
 
-                    var returnUrl = !string.IsNullOrEmpty(transaction.ReturnUrl)
-                        ? transaction.ReturnUrl
-                        : $"{_configuration["PaymentPageUrl"]}/payment/{paymentCode}/result";
+                    // returnUrl: ZaloPay redirect browser về Payment Hub trước
+                    // Payment Hub xử lý (cập nhật trạng thái) rồi redirect tiếp về merchant
+                    // Flow: ZaloPay → Payment Hub /api/payments/{code}/zalopay-return → merchant ReturnUrl
+                    var apiBaseUrl = _configuration["PaymentHubApiUrl"] ?? "http://localhost:5000";
+                    var returnUrl = $"{apiBaseUrl}/api/payments/{paymentCode}/zalopay-return";
 
                     var adapter = _adapterRegistry.GetAdapter("ZALOPAY");
-
                     // Parse encrypted keys + AppId từ ExtraConfig (persist qua restart)
                     string encryptedApiKey = string.Empty;
                     string encryptedSecretKey = string.Empty;
@@ -367,32 +368,83 @@ public class PaymentAppService : ApplicationService, IPaymentAppService
     }
 
     /// <summary>
-    /// Handles ZaloPay return URL — cập nhật split Captured khi status=1
-    /// AppTransId format: yyMMdd_SPLIT-XXXXXX
+    /// Xử lý ZaloPay return URL — ZaloPay redirect browser về đây sau khi user thanh toán.
+    /// 
+    /// Ghi nhận kết quả ngay từ redirect params (không chờ webhook):
+    ///   - status=1 → Captured (thành công)
+    ///   - status khác → Failed
+    /// 
+    /// Webhook từ ZaloPay là backup phòng trường hợp user đóng browser trước khi redirect.
+    /// Idempotent: nếu split đã Captured (do webhook về trước) thì bỏ qua.
+    /// 
+    /// Trả về: merchantReturnUrl để controller redirect tiếp về merchant app.
     /// </summary>
-    public async Task HandleZaloPayReturnAsync(string paymentCode, string appTransId, string status)
+    public async Task<string?> HandleZaloPayReturnAsync(string paymentCode, string appTransId, string status)
     {
-        if (status != "1") return; // chỉ xử lý khi thành công
-
         // Parse SplitCode từ AppTransId (format: yyMMdd_SPLIT-XXXXXX)
         var parts = appTransId.Split('_');
-        if (parts.Length < 2) return;
+        if (parts.Length < 2)
+        {
+            _log.LogWarning("[ZaloPayReturn] Invalid appTransId format: {AppTransId}", appTransId);
+            return null;
+        }
 
         var splitCode = parts[1]; // "SPLIT-XXXXXX"
 
         var split = await _paymentSplitRepository.FirstOrDefaultAsync(s => s.SplitCode == splitCode);
-        if (split == null || split.State == TransactionState.Captured) return; // idempotent
-
-        split.UpdateState(TransactionState.Captured);
-        await _paymentSplitRepository.UpdateAsync(split);
-
-        // Check if all splits captured → notify tenant
-        var allSplits = await _paymentSplitRepository.GetListAsync(s => s.TransactionId == split.TransactionId);
-        if (allSplits.All(s => s.State == TransactionState.Captured))
+        if (split == null)
         {
-            var transaction = await _transactionRepository.GetAsync(split.TransactionId);
-            await NotifyTenantWebhookAsync(transaction, allSplits);
+            _log.LogWarning("[ZaloPayReturn] Split not found: {SplitCode}", splitCode);
+            return null;
         }
+
+        var transaction = await _transactionRepository.GetAsync(split.TransactionId);
+
+        // Idempotent: đã Captured rồi (webhook về trước) → bỏ qua, redirect luôn
+        if (split.State != TransactionState.Captured)
+        {
+            if (status == "1")
+            {
+                // Thành công → ghi nhận Captured ngay từ redirect
+                _log.LogInformation("[ZaloPayReturn] ✅ Captured split {SplitCode} from redirect", splitCode);
+                split.UpdateState(TransactionState.Captured);
+                split.ProviderTransactionId = appTransId;
+            }
+            else
+            {
+                // Thất bại
+                _log.LogWarning("[ZaloPayReturn] ❌ Failed split {SplitCode}, status={Status}", splitCode, status);
+                split.UpdateState(TransactionState.Failed);
+            }
+
+            await _paymentSplitRepository.UpdateAsync(split);
+
+            // Nếu tất cả splits đã Captured → notify tenant
+            if (status == "1")
+            {
+                var allSplits = await _paymentSplitRepository.GetListAsync(s => s.TransactionId == split.TransactionId);
+                if (allSplits.All(s => s.State == TransactionState.Captured))
+                {
+                    _log.LogInformation("[ZaloPayReturn] All splits captured → notify tenant for {PaymentCode}", paymentCode);
+                    await NotifyTenantWebhookAsync(transaction, allSplits);
+                }
+            }
+        }
+        else
+        {
+            _log.LogInformation("[ZaloPayReturn] Split {SplitCode} already Captured (webhook arrived first), skipping", splitCode);
+        }
+
+        // Trả về merchant ReturnUrl để redirect tiếp
+        // Append status vào URL để merchant app biết kết quả
+        var merchantUrl = transaction.ReturnUrl;
+        if (!string.IsNullOrEmpty(merchantUrl))
+        {
+            var separator = merchantUrl.Contains('?') ? "&" : "?";
+            merchantUrl += $"{separator}paymentCode={paymentCode}&status={status}";
+        }
+
+        return merchantUrl;
     }
 
     /// <summary>

@@ -20,5 +20,6 @@ public interface IPaymentAppService : IApplicationService
     Task HandleZaloPayCallbackAsync(ZaloPayCallbackData data);
 
     // ZaloPay return URL handler (khi user redirect về sau thanh toán)
-    Task HandleZaloPayReturnAsync(string paymentCode, string appTransId, string status);
+    // Trả về merchantReturnUrl để controller redirect tiếp về merchant app
+    Task<string?> HandleZaloPayReturnAsync(string paymentCode, string appTransId, string status);
 }
