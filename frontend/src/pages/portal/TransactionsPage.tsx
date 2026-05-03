@@ -302,7 +302,7 @@ export default function TransactionsPage() {
         }
         onCancel={() => setDetailModal(null)}
         footer={[
-          detailModal?.status === 'PENDING' || detailModal?.status === 'PARTIAL_PAID' && (
+          (detailModal?.status === 'PENDING' || detailModal?.status === 'PARTIAL_PAID') && (
             <Button
               key="pay"
               type="primary"
