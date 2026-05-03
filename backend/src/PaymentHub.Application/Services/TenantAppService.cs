@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using PaymentHub.Application.Services;
 using PaymentHub.Dtos;
 using PaymentHub.Entities;
@@ -13,19 +14,22 @@ public class TenantAppService : ApplicationService, ITenantAppService
     private readonly IRepository<ProviderConfig, Guid> _providerConfigRepository;
     private readonly IRepository<Merchant, Guid> _merchantRepository;
     private readonly IKmsService _kmsService;
+    private readonly IConfiguration _configuration;
 
     public TenantAppService(
         IRepository<Tenant, Guid> tenantRepository,
         IRepository<PaymentMethod, Guid> paymentMethodRepository,
         IRepository<ProviderConfig, Guid> providerConfigRepository,
         IRepository<Merchant, Guid> merchantRepository,
-        IKmsService kmsService)
+        IKmsService kmsService,
+        IConfiguration configuration)
     {
         _tenantRepository = tenantRepository;
         _paymentMethodRepository = paymentMethodRepository;
         _providerConfigRepository = providerConfigRepository;
         _merchantRepository = merchantRepository;
         _kmsService = kmsService;
+        _configuration = configuration;
     }
 
     public async Task<List<TenantDto>> GetTenantsAsync()
@@ -106,8 +110,10 @@ public class TenantAppService : ApplicationService, ITenantAppService
         var secretKeyRef = await _kmsService.StoreSecretAsync($"{tenantId}/{providerId}/secret_key", request.SecretKey);
 
         var config = new ProviderConfig(GuidGenerator.Create(), tenantId, providerId, request.MerchantId, callbackUrl: "", returnUrl: "");
-        // CallbackUrl: PaymentHub tự config ở portal provider
-        // ReturnUrl: lấy từ Tenant.RedirectUrl khi tạo payment
+        // CallbackUrl: Payment Hub tự set = {PaymentHubApiUrl}/api/webhooks/{providerId}
+        // ZaloPay/MoMo sẽ POST về đây, Payment Hub xử lý rồi mới notify tenant
+        var apiBaseUrl = _configuration["PaymentHubApiUrl"] ?? "http://localhost:5000";
+        config.CallbackUrl  = $"{apiBaseUrl}/api/webhooks/{providerId.ToLower()}";
         config.Enabled      = request.Enabled;
         config.ApiKeyRef    = apiKeyRef;
         config.SecretKeyRef = secretKeyRef;

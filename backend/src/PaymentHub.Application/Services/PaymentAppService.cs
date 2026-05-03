@@ -274,7 +274,10 @@ public class PaymentAppService : ApplicationService, IPaymentAppService
                         ApiKeyRef:   providerConfig?.ApiKeyRef    ?? "",
                         SecretKeyRef: providerConfig?.SecretKeyRef ?? "",
                         AppId:       extraAppId,
-                        AppUser:     extraAppUser
+                        AppUser:     extraAppUser,
+                        // CallbackUrl: Payment Hub nhận webhook, KHÔNG phải merchant
+                        // ZaloPay → POST /api/webhooks/zalopay → Payment Hub xử lý → notify tenant
+                        CallbackUrl: providerConfig?.CallbackUrl ?? ""
                     ));
 
                     split.RedirectUrl    = orderResult.PaymentUrl;

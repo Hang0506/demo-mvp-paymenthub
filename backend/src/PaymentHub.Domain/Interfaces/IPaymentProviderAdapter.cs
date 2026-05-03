@@ -33,6 +33,7 @@ public record CreateOrderCommand(
     string  SecretKeyRef = "",
     int     AppId        = 0,
     string  AppUser      = "",
+    string  CallbackUrl  = "",   // URL Payment Hub nhận webhook từ provider
     CustomerInfo? CustomerInfo = null
 );
 

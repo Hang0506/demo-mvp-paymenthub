@@ -88,16 +88,21 @@ public class ZaloPayProviderAdapter : IPaymentProviderAdapter
 
         var formData = new Dictionary<string, string>
         {
-            ["app_id"]       = appId.ToString(),
-            ["app_user"]     = appUser,
-            ["app_trans_id"] = appTransId,
-            ["app_time"]     = appTime.ToString(),
-            ["amount"]       = ((long)command.Amount).ToString(),
-            ["item"]         = item,
-            ["embed_data"]   = embedData,
-            ["bank_code"]    = "",
-            ["description"]  = description,
-            ["mac"]          = mac,
+            ["app_id"]        = appId.ToString(),
+            ["app_user"]      = appUser,
+            ["app_trans_id"]  = appTransId,
+            ["app_time"]      = appTime.ToString(),
+            ["amount"]        = ((long)command.Amount).ToString(),
+            ["item"]          = item,
+            ["embed_data"]    = embedData,
+            ["bank_code"]     = "",
+            ["description"]   = description,
+            ["mac"]           = mac,
+            // callback_url: ZaloPay gọi về Payment Hub, KHÔNG phải merchant
+            // Payment Hub xử lý xong mới notify merchant qua TenantNotifier
+            ["callback_url"]  = !string.IsNullOrEmpty(command.CallbackUrl)
+                                    ? command.CallbackUrl
+                                    : "",
         };
 
         try
