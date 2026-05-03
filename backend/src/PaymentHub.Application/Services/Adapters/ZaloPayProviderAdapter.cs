@@ -2,7 +2,6 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using PaymentHub.Interfaces;
 
@@ -11,6 +10,10 @@ namespace PaymentHub.Application.Services.Adapters;
 /// <summary>
 /// ZaloPay Provider Adapter — gọi API sandbox thật.
 /// POST https://sb-openapi.zalopay.vn/v2/create
+///
+/// Mọi credentials (AppId, Key1, AppUser) đều lấy từ ProviderConfig trong DB
+/// (được tenant configure qua API /tenants/{id}/providers/ZALOPAY).
+/// Không có fallback về appsettings — nếu chưa configure thì báo lỗi rõ ràng.
 /// </summary>
 public class ZaloPayProviderAdapter : IPaymentProviderAdapter
 {
@@ -20,23 +23,15 @@ public class ZaloPayProviderAdapter : IPaymentProviderAdapter
     private const string SandboxCreateUrl = "https://sb-openapi.zalopay.vn/v2/create";
 
     private readonly IKmsService _kms;
-    private readonly IConfiguration _configuration;
     private readonly ILogger<ZaloPayProviderAdapter> _logger;
     private readonly IHttpClientFactory _httpClientFactory;
 
-    // Config fallback (dùng khi chưa có KMS ref — điền sandbox keys của bạn vào appsettings.json)
-    private int    AppId      => int.Parse(_configuration["ZaloPay:AppId"]  ?? "0");
-    private string Key1       => _configuration["ZaloPay:Key1"]             ?? "";
-    private string AppUser    => _configuration["ZaloPay:AppUser"]          ?? "PaymentHub";
-
     public ZaloPayProviderAdapter(
         IKmsService kms,
-        IConfiguration configuration,
         ILogger<ZaloPayProviderAdapter> logger,
         IHttpClientFactory httpClientFactory)
     {
         _kms               = kms;
-        _configuration     = configuration;
         _logger            = logger;
         _httpClientFactory = httpClientFactory;
     }
@@ -57,27 +52,31 @@ public class ZaloPayProviderAdapter : IPaymentProviderAdapter
     // ── Create Order — gọi ZaloPay API thật ──────────────────────────────────
     public async Task<CreateOrderResult> CreateOrder(CreateOrderCommand command)
     {
-        // KMS tự đọc từ DB → decrypt → trả về plaintext
-        var key1 = !string.IsNullOrEmpty(command.ApiKeyRef)
-            ? await _kms.GetSecretAsync(command.ApiKeyRef)
-            : string.Empty;
+        // Lấy Key1 từ KMS (đã encrypt trong DB khi tenant configure provider)
+        if (string.IsNullOrEmpty(command.ApiKeyRef))
+            throw new InvalidOperationException(
+                "[ZaloPay] ApiKeyRef is empty. Tenant chưa configure ZaloPay provider. " +
+                "Gọi POST /api/tenants/{tenantId}/providers/ZALOPAY trước.");
 
-        // Fallback về appsettings (sandbox demo key)
+        var key1 = await _kms.GetSecretAsync(command.ApiKeyRef);
         if (string.IsNullOrEmpty(key1))
-        {
-            _logger.LogWarning("[ZaloPay] KMS miss for ref={Ref}, using appsettings fallback", command.ApiKeyRef);
-            key1 = Key1;
-        }
+            throw new InvalidOperationException(
+                $"[ZaloPay] Không lấy được Key1 từ KMS ref={command.ApiKeyRef}. " +
+                "Kiểm tra lại cấu hình provider.");
+
+        // AppId và AppUser lấy từ ProviderConfig.ExtraConfig (qua command)
+        if (command.AppId <= 0)
+            throw new InvalidOperationException(
+                "[ZaloPay] AppId không hợp lệ. Kiểm tra lại MerchantId khi configure provider.");
+
+        var appId   = command.AppId;
+        var appUser = !string.IsNullOrEmpty(command.AppUser) ? command.AppUser : "PaymentHub";
 
         var appTransId  = DateTime.UtcNow.ToString("yyMMdd") + "_" + command.OrderCode;
         var appTime     = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var embedData   = JsonSerializer.Serialize(new { redirecturl = command.ReturnUrl });
         var item        = "[]";
         var description = $"Payment {command.OrderCode}";
-
-        // Dùng AppId/AppUser từ command (tenant-specific), fallback về appsettings
-        var appId   = command.AppId > 0 ? command.AppId : AppId;
-        var appUser = !string.IsNullOrEmpty(command.AppUser) ? command.AppUser : AppUser;
 
         // MAC = HMAC-SHA256(Key1, "app_id|app_trans_id|app_user|amount|app_time|embed_data|item")
         var macData = $"{appId}|{appTransId}|{appUser}|{(long)command.Amount}|{appTime}|{embedData}|{item}";
