@@ -1,0 +1,9 @@
+{
+  "culture": "en",
+  "texts": {
+    "PaymentNotFound": "Payment not found",
+    "InvalidSplitAmount": "Split amounts must equal total amount",
+    "TenantNotFound": "Tenant not found",
+    "ProviderNotFound": "Provider not found"
+  }
+}

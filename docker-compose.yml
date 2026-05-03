@@ -1,0 +1,99 @@
+version: '3.8'
+
+services:
+
+  # ─── Infrastructure ───────────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: payment-hub-postgres
+    environment:
+      POSTGRES_DB: PaymentHubDb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d PaymentHubDb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - payment-hub
+
+  redis:
+    image: redis:7-alpine
+    container_name: payment-hub-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - payment-hub
+
+  # ─── Application ──────────────────────────────────────────────────────────
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: payment-hub-api
+    ports:
+      - "5000:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__Default=Host=postgres;Port=5432;Database=PaymentHubDb;Username=postgres;Password=postgres
+      - PaymentPageUrl=http://localhost:3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/swagger/index.html"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - payment-hub
+    restart: on-failure
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: payment-hub-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+    networks:
+      - payment-hub
+    restart: on-failure
+
+  mock-tenant:
+    build:
+      context: ./mock-tenant
+      dockerfile: Dockerfile
+    container_name: payment-hub-mock-tenant
+    ports:
+      - "5001:5001"
+    networks:
+      - payment-hub
+    restart: on-failure
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  payment-hub:
+    name: payment-hub-network

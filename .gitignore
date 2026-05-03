@@ -1,0 +1,21 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.log
+
+# Node
+node_modules/
+dist/
+.env
+.env.local
+
+# Docker volumes
+postgres-data/
+redis-data/
+
+# OS
+.DS_Store
+Thumbs.db
