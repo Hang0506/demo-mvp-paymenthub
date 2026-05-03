@@ -40,8 +40,14 @@ public class MockKmsService : IKmsService
         var rawIv = configuration["Kms:AesIv"]
             ?? throw new InvalidOperationException("Kms:AesIv is not configured in appsettings.json");
 
-        _aesKey = Encoding.UTF8.GetBytes(rawKey.PadRight(32).Substring(0, 32));
-        _aesIv  = Encoding.UTF8.GetBytes(rawIv.PadRight(16).Substring(0, 16));
+        // Key/IV lưu dạng Base64 trong appsettings để tránh vấn đề encoding
+        _aesKey = Convert.FromBase64String(rawKey);
+        _aesIv  = Convert.FromBase64String(rawIv);
+
+        if (_aesKey.Length != 32)
+            throw new InvalidOperationException($"Kms:AesKey phải là 32 bytes (AES-256). Hiện tại: {_aesKey.Length} bytes.");
+        if (_aesIv.Length != 16)
+            throw new InvalidOperationException($"Kms:AesIv phải là 16 bytes. Hiện tại: {_aesIv.Length} bytes.");
     }
 
     /// <summary>
