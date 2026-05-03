@@ -24,9 +24,9 @@ public class ZaloPayProviderAdapter : IPaymentProviderAdapter
     private readonly ILogger<ZaloPayProviderAdapter> _logger;
     private readonly IHttpClientFactory _httpClientFactory;
 
-    // Config fallback (dùng khi chưa có KMS ref — sandbox demo keys)
-    private int    AppId      => int.Parse(_configuration["ZaloPay:AppId"]  ?? "2553");
-    private string Key1       => _configuration["ZaloPay:Key1"]             ?? "PcY4iZIKFCIdgZvA6ueMcMHHUbRLYjPL";
+    // Config fallback (dùng khi chưa có KMS ref — điền sandbox keys của bạn vào appsettings.json)
+    private int    AppId      => int.Parse(_configuration["ZaloPay:AppId"]  ?? "0");
+    private string Key1       => _configuration["ZaloPay:Key1"]             ?? "";
     private string AppUser    => _configuration["ZaloPay:AppUser"]          ?? "PaymentHub";
 
     public ZaloPayProviderAdapter(

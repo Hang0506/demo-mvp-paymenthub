@@ -6,6 +6,9 @@ obj/
 .vs/
 *.log
 
+# Secrets — dùng appsettings.json.example làm template
+# appsettings.json  ← bỏ comment dòng này nếu muốn exclude hoàn toàn
+
 # Node
 node_modules/
 dist/
