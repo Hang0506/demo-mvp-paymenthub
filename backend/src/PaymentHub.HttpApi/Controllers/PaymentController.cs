@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 using PaymentHub.Dtos;
 using PaymentHub.Services;
 using Volo.Abp.AspNetCore.Mvc;
@@ -12,10 +13,12 @@ namespace PaymentHub.Controllers;
 public class PaymentController : AbpControllerBase
 {
     private readonly IPaymentAppService _paymentAppService;
+    private readonly IConfiguration _configuration;
 
-    public PaymentController(IPaymentAppService paymentAppService)
+    public PaymentController(IPaymentAppService paymentAppService, IConfiguration configuration)
     {
         _paymentAppService = paymentAppService;
+        _configuration = configuration;
     }
 
     [HttpGet]
@@ -74,9 +77,16 @@ public class PaymentController : AbpControllerBase
                 paymentCode, apptransid, status ?? "0");
         }
 
-        // Redirect về merchant app (hoặc Payment Hub frontend nếu không có merchant URL)
-        var redirectTo = merchantReturnUrl
-            ?? $"{Request.Scheme}://{Request.Host.Value.Replace("5000", "3000")}/payment/{paymentCode}/result";
+        // Luôn redirect về Payment Hub result page trước
+        // Result page sẽ hiển thị trạng thái và tự redirect về merchant sau
+        var paymentPageBase = _configuration["PaymentPageUrl"] ?? "http://localhost:3000";
+        var resultStatus = status == "1" ? "success" : "failed";
+        var redirectTo = $"{paymentPageBase}/payment/{paymentCode}/result?status={resultStatus}";
+        if (!string.IsNullOrEmpty(merchantReturnUrl))
+        {
+            // Encode merchant URL để result page có thể redirect tiếp
+            redirectTo += $"&returnUrl={Uri.EscapeDataString(merchantReturnUrl)}";
+        }
 
         return Redirect(redirectTo);
     }

@@ -27,6 +27,18 @@ export default function PaymentPage() {
     if (paymentCode) loadPage()
   }, [paymentCode])
 
+  // Khi user quay lại từ ZaloPay redirect, URL có thể có query params
+  // Check status ngay lập tức
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const zalopayStatus = params.get('status')
+    const appTransId = params.get('apptransid')
+    if (zalopayStatus && appTransId && paymentCode) {
+      // Đợi 1s để backend xử lý xong rồi check status
+      setTimeout(() => loadPage(), 1000)
+    }
+  }, [paymentCode])
+
   const loadPage = async () => {
     try {
       setLoading(true)

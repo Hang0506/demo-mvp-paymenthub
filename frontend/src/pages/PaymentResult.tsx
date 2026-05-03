@@ -28,12 +28,7 @@ const PaymentResult: React.FC = () => {
     const init = async () => {
       try {
         if (paymentCode) {
-          // Nếu là ZaloPay return, gọi backend verify (best-effort)
-          if (isZaloPayReturn) {
-            await fetch(`/api/payments/${paymentCode}/zalopay-return?${searchParams.toString()}`, {
-              method: 'POST'
-            }).catch(() => {})
-          }
+          // Backend đã xử lý khi redirect từ /zalopay-return — chỉ cần lấy status
           const status = await getPaymentStatus(paymentCode)
           setPaymentStatus(status)
 
