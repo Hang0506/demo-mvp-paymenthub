@@ -314,11 +314,20 @@ public class PaymentAppService : ApplicationService, IPaymentAppService
         var allRefunded  = splits.Count > 0 && splits.All(s => s.State == TransactionState.Refunded);
         var anyRefunded  = splits.Any(s => s.State == TransactionState.Refunded);
         var anyFailed    = splits.Any(s => s.State == TransactionState.Failed);
+        var anyPending   = splits.Any(s => s.State == TransactionState.PendingAuthorize || s.State == TransactionState.Created);
 
-        var status = allRefunded ? "REFUNDED"
-                   : anyRefunded ? "PARTIAL_REFUND"
-                   : allCaptured ? "PAID"
-                   : anyFailed   ? "FAILED"
+        // Logic trạng thái:
+        // - REFUNDED: tất cả splits đã hoàn tiền
+        // - PARTIAL_REFUND: một số splits đã hoàn tiền
+        // - PAID: tất cả splits đã Captured
+        // - FAILED: có split thất bại VÀ không còn split nào đang chờ xử lý
+        //   (nếu còn split đang chờ → vẫn là PENDING, user có thể thử lại)
+        // - PENDING: còn split đang xử lý (kể cả khi có split thất bại)
+        var status = allRefunded  ? "REFUNDED"
+                   : anyRefunded  ? "PARTIAL_REFUND"
+                   : allCaptured  ? "PAID"
+                   : anyPending   ? "PENDING"   // còn đang xử lý → chưa kết luận
+                   : anyFailed    ? "FAILED"    // tất cả đã xong, có thất bại
                    : "PENDING";
 
         return new PaymentStatusResponse
@@ -348,9 +357,12 @@ public class PaymentAppService : ApplicationService, IPaymentAppService
             var allRefunded = splits.Count > 0 && splits.All(s => s.State == TransactionState.Refunded);
             var anyRefunded = splits.Any(s => s.State == TransactionState.Refunded);
             var anyFailed   = splits.Any(s => s.State == TransactionState.Failed);
+            var anyPending  = splits.Any(s => s.State == TransactionState.PendingAuthorize || s.State == TransactionState.Created);
+
             var status = allRefunded ? "REFUNDED"
                        : anyRefunded ? "PARTIAL_REFUND"
                        : allCaptured ? "PAID"
+                       : anyPending  ? "PENDING"
                        : anyFailed   ? "FAILED"
                        : "PENDING";
 
