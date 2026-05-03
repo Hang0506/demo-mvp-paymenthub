@@ -6,7 +6,8 @@ import {
 import {
   EyeOutlined, ReloadOutlined, CheckCircleOutlined,
   ClockCircleOutlined, CloseCircleOutlined, LinkOutlined,
-  DollarOutlined, TransactionOutlined, SyncOutlined, RollbackOutlined
+  DollarOutlined, TransactionOutlined, SyncOutlined, RollbackOutlined,
+  ExclamationCircleOutlined
 } from '@ant-design/icons'
 import axios from 'axios'
 
@@ -16,6 +17,7 @@ const STATUS_CFG = {
   PAID:           { color: 'success',    icon: <CheckCircleOutlined />, text: 'Đã thanh toán',   badge: 'success'    as const },
   PENDING:        { color: 'processing', icon: <SyncOutlined spin />,  text: 'Đang xử lý',       badge: 'processing' as const },
   FAILED:         { color: 'error',      icon: <CloseCircleOutlined />, text: 'Thất bại',         badge: 'error'      as const },
+  PARTIAL_PAID:   { color: 'warning',    icon: <ExclamationCircleOutlined />, text: 'Thanh toán 1 phần', badge: 'warning' as const },
   REFUNDED:       { color: 'default',    icon: <RollbackOutlined />,   text: 'Đã hoàn tiền',     badge: 'default'    as const },
   PARTIAL_REFUND: { color: 'warning',    icon: <RollbackOutlined />,   text: 'Hoàn 1 phần',      badge: 'warning'    as const },
 }
@@ -64,7 +66,7 @@ export default function TransactionsPage() {
 
   // Auto-refresh mỗi 10s nếu có giao dịch PENDING
   useEffect(() => {
-    const hasPending = transactions.some(t => t.status === 'PENDING')
+    const hasPending = transactions.some(t => t.status === 'PENDING' || t.status === 'PARTIAL_PAID')
     if (!hasPending) return
     const timer = setInterval(() => loadTransactions(selectedTenant || undefined), 10000)
     return () => clearInterval(timer)
@@ -113,7 +115,7 @@ export default function TransactionsPage() {
             <Progress
               percent={pct}
               size="small"
-              status={r.status === 'PAID' ? 'success' : r.status === 'FAILED' ? 'exception' : 'active'}
+              status={r.status === 'PAID' ? 'success' : r.status === 'FAILED' ? 'exception' : r.status === 'PARTIAL_PAID' ? 'exception' : 'active'}
               format={() => `${r.paidAmount.toLocaleString()} ₫`}
             />
           </div>
@@ -125,9 +127,12 @@ export default function TransactionsPage() {
       dataIndex: 'status',
       key: 'status',
       filters: [
-        { text: 'Đã thanh toán', value: 'PAID' },
-        { text: 'Đang xử lý',   value: 'PENDING' },
-        { text: 'Thất bại',     value: 'FAILED' },
+        { text: 'Đã thanh toán',     value: 'PAID' },
+        { text: 'Đang xử lý',        value: 'PENDING' },
+        { text: 'Thanh toán 1 phần', value: 'PARTIAL_PAID' },
+        { text: 'Thất bại',          value: 'FAILED' },
+        { text: 'Đã hoàn tiền',      value: 'REFUNDED' },
+        { text: 'Hoàn 1 phần',       value: 'PARTIAL_REFUND' },
       ],
       onFilter: (value: any, record: any) => record.status === value,
       render: (v: string) => {
@@ -162,7 +167,7 @@ export default function TransactionsPage() {
           <Button size="small" icon={<EyeOutlined />} onClick={() => setDetailModal(record)}>
             Chi tiết
           </Button>
-          {record.status === 'PENDING' && (
+          {(record.status === 'PENDING' || record.status === 'PARTIAL_PAID') && (
             <Tooltip title="Mở trang thanh toán">
               <Button
                 size="small"
@@ -264,7 +269,7 @@ export default function TransactionsPage() {
           rowKey="paymentRequestCode"
           loading={loading}
           pagination={{ pageSize: 20, showSizeChanger: true }}
-          rowClassName={r => r.status === 'PENDING' ? 'ant-table-row-pending' : ''}
+          rowClassName={r => (r.status === 'PENDING' || r.status === 'PARTIAL_PAID') ? 'ant-table-row-pending' : ''}
           summary={() => (
             <Table.Summary.Row>
               <Table.Summary.Cell index={0} colSpan={2}>
@@ -297,7 +302,7 @@ export default function TransactionsPage() {
         }
         onCancel={() => setDetailModal(null)}
         footer={[
-          detailModal?.status === 'PENDING' && (
+          detailModal?.status === 'PENDING' || detailModal?.status === 'PARTIAL_PAID' && (
             <Button
               key="pay"
               type="primary"
