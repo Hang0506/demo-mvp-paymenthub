@@ -1,60 +1,34 @@
 import { useState, useEffect } from 'react'
-import { Card, Form, Select, Button, Table, message, Tag, Space, Typography, Alert, Tooltip } from 'antd'
-import { CreditCardOutlined, CheckCircleOutlined, InfoCircleOutlined } from '@ant-design/icons'
+import { Card, Form, Select, Button, Table, message, Tag, Space, Typography, Alert, Spin } from 'antd'
+import { CreditCardOutlined, CheckCircleOutlined, InfoCircleOutlined, ReloadOutlined } from '@ant-design/icons'
 import axios from 'axios'
 
 const { Text } = Typography
 
-// PTTT = Loại hình thanh toán (từ góc nhìn khách hàng)
 const METHOD_TYPES = [
-  {
-    value: 'CASH',
-    label: 'Tiền mặt',
-    icon: '💵',
-    description: 'Khách trả tiền mặt tại quầy, xác nhận ngay',
-    providers: ['(Nội bộ, không cần cổng)'],
-    color: 'green',
-  },
-  {
-    value: 'E_WALLET',
-    label: 'Ví điện tử',
-    icon: '📱',
-    description: 'Thanh toán qua ví ZaloPay, MoMo — cần cấu hình Provider',
-    providers: ['ZaloPay', 'MoMo'],
-    color: 'blue',
-  },
-  {
-    value: 'BANK_TRANSFER',
-    label: 'Chuyển khoản ngân hàng',
-    icon: '🏦',
-    description: 'Chuyển khoản qua VNPay, VietQR — cần cấu hình Provider',
-    providers: ['VNPay', 'Napas VietQR'],
-    color: 'purple',
-  },
-  {
-    value: 'CARD',
-    label: 'Thẻ ATM / Visa / Master',
-    icon: '💳',
-    description: 'Quẹt thẻ nội địa hoặc quốc tế — cần cấu hình Provider',
-    providers: ['VNPay', 'OnePay'],
-    color: 'orange',
-  },
+  { value: 'CASH',          label: 'Tiền mặt',              icon: '💵', description: 'Xác nhận ngay, không cần cổng',          providers: ['(Nội bộ)'],          color: 'green'  },
+  { value: 'E_WALLET',      label: 'Ví điện tử',            icon: '📱', description: 'ZaloPay, MoMo — cần cấu hình Provider',  providers: ['ZaloPay', 'MoMo'],   color: 'blue'   },
+  { value: 'BANK_TRANSFER', label: 'Chuyển khoản',          icon: '🏦', description: 'VNPay, VietQR — cần cấu hình Provider',  providers: ['VNPay', 'Napas'],    color: 'purple' },
+  { value: 'CARD',          label: 'Thẻ ATM / Visa',        icon: '💳', description: 'Thẻ nội địa/quốc tế — cần Provider',     providers: ['VNPay', 'OnePay'],   color: 'orange' },
 ]
-
-interface MethodConfig {
-  tenantId: string
-  methodType: string
-  displayName: string
-  enabled: boolean
-}
 
 export default function PaymentMethodsPage() {
   const [form] = Form.useForm()
-  const [loading, setLoading] = useState(false)
-  const [registered, setRegistered] = useState<MethodConfig[]>([])
+  const [loading, setLoading]           = useState(false)
   const [selectedTypes, setSelectedTypes] = useState<string[]>([])
-  const [tenantOptions, setTenantOptions] = useState<{value: string, label: string}[]>([])
-  const [tenantLoading, setTenantLoading] = useState(false)
+
+  // Tenant → Merchant cascade
+  const [tenantOptions, setTenantOptions]   = useState<{value: string, label: string}[]>([])
+  const [tenantLoading, setTenantLoading]   = useState(false)
+  const [merchantOptions, setMerchantOptions] = useState<{value: string, label: string}[]>([])
+  const [merchantLoading, setMerchantLoading] = useState(false)
+  const [selectedTenant, setSelectedTenant] = useState<string>('')
+
+  // Danh sách PTTT đã đăng ký — fetch từ API
+  const [registered, setRegistered]     = useState<any[]>([])
+  const [tableLoading, setTableLoading] = useState(false)
+
+  useEffect(() => { loadTenants() }, [])
 
   const loadTenants = async () => {
     setTenantLoading(true)
@@ -68,36 +42,44 @@ export default function PaymentMethodsPage() {
     }
   }
 
-  useEffect(() => { loadTenants() }, [])
+  const handleTenantChange = async (tenantId: string) => {
+    setSelectedTenant(tenantId)
+    form.setFieldValue('merchantCode', undefined)
+    setMerchantOptions([])
+    setRegistered([])
+    if (!tenantId) return
+
+    // Load merchants của tenant
+    setMerchantLoading(true)
+    try {
+      const res = await axios.get(`/api/payment-tenants/${tenantId}/merchants`)
+      setMerchantOptions((res.data?.value ?? res.data ?? []).map((m: any) => ({ value: m.merchantCode, label: `${m.merchantName} (${m.merchantCode})` })))
+    } catch {} finally { setMerchantLoading(false) }
+  }
+
+  const handleMerchantChange = async (tenantId: string, merchantCode: string) => {
+    if (!tenantId || !merchantCode) return
+    // Load PTTT đã đăng ký của tenant (hiện tại API theo tenant, không theo merchant)
+    setTableLoading(true)
+    try {
+      const res = await axios.get(`/api/payment-tenants/${tenantId}/payment-methods`)
+      setRegistered((res.data?.value ?? res.data ?? []).map((m: any) => ({ ...m, tenantId, merchantCode })))
+    } catch {} finally { setTableLoading(false) }
+  }
 
   const handleSubmit = async (values: any) => {
     setLoading(true)
     try {
-      // Gọi API với đúng model: methodType thay vì methodId
       const methods = values.methodTypes.map((type: string) => {
         const opt = METHOD_TYPES.find(m => m.value === type)!
-        return {
-          methodId: type,          // backward compat với API hiện tại
-          methodName: opt.label,   // display name
-          enabled: true,
-        }
+        return { methodId: type, methodName: opt.label, enabled: true }
       })
-
       await axios.post(`/api/payment-tenants/${values.tenantId}/payment-methods`, { methods })
-
-      const newEntries: MethodConfig[] = methods.map((m: any) => ({
-        tenantId: values.tenantId,
-        methodType: m.methodId,
-        displayName: m.methodName,
-        enabled: true,
-      }))
-      setRegistered(prev => [
-        ...newEntries,
-        ...prev.filter(r => r.tenantId !== values.tenantId),
-      ])
-      message.success(`${methods.length} phương thức thanh toán đã đăng ký cho ${values.tenantId}!`)
-      form.resetFields()
+      message.success(`${methods.length} PTTT đã đăng ký cho ${values.tenantId}!`)
+      form.resetFields(['methodTypes'])
       setSelectedTypes([])
+      // Reload danh sách
+      await handleMerchantChange(values.tenantId, values.merchantCode)
     } catch (err: any) {
       message.error(err.response?.data?.error?.message ?? 'Đăng ký thất bại')
     } finally {
@@ -109,125 +91,83 @@ export default function PaymentMethodsPage() {
 
   const columns = [
     {
-      title: 'Tenant', dataIndex: 'tenantId', key: 'tenantId',
-      render: (v: string) => <Tag color="blue">{v}</Tag>,
-    },
-    {
-      title: 'Loại hình thanh toán (PTTT)', dataIndex: 'methodType', key: 'methodType',
-      render: (v: string, r: MethodConfig) => {
+      title: 'PTTT', dataIndex: 'methodId', key: 'methodId',
+      render: (v: string, r: any) => {
         const opt = METHOD_TYPES.find(m => m.value === v)
         return (
           <Space>
-            <span>{opt?.icon}</span>
+            <span style={{ fontSize: 18 }}>{opt?.icon ?? '💳'}</span>
             <div>
-              <Text strong>{r.displayName}</Text>
-              <br />
-              <Text type="secondary" style={{ fontSize: 11 }}>
-                Provider: {opt?.providers.join(', ')}
-              </Text>
+              <Text strong>{r.methodName ?? opt?.label ?? v}</Text>
+              <div style={{ fontSize: 11, color: '#94a3b8' }}>{opt?.providers.join(' · ')}</div>
             </div>
           </Space>
         )
       },
     },
     {
-      title: 'Cổng thanh toán (Provider)', dataIndex: 'methodType', key: 'providers',
-      render: (v: string) => {
-        const opt = METHOD_TYPES.find(m => m.value === v)
-        if (v === 'CASH') return <Tag color="green">Nội bộ</Tag>
-        return (
-          <Space>
-            {opt?.providers.map(p => <Tag key={p} color="geekblue">{p}</Tag>)}
-          </Space>
-        )
-      },
+      title: 'Tenant', dataIndex: 'tenantId', key: 'tenantId',
+      render: (v: string) => <Tag color="blue">{v}</Tag>,
     },
     {
       title: 'Trạng thái', dataIndex: 'enabled', key: 'enabled',
-      render: () => <Tag color="green" icon={<CheckCircleOutlined />}>Active</Tag>,
+      render: (v: boolean) => <Tag color={v !== false ? 'green' : 'red'} icon={<CheckCircleOutlined />}>{v !== false ? 'Active' : 'Inactive'}</Tag>,
     },
   ]
 
   return (
     <div>
       <Alert
-        message={
-          <span>
-            <strong>Phân biệt PTTT và Provider:</strong>
-            {' '}PTTT là loại hình thanh toán (Tiền mặt, Ví điện tử...).
-            Provider là cổng cụ thể (ZaloPay, MoMo...) xử lý từng loại.
-            Cấu hình Provider ở tab <strong>Provider Config</strong>.
-          </span>
-        }
-        type="info"
-        showIcon
-        icon={<InfoCircleOutlined />}
-        style={{ marginBottom: 20 }}
+        message={<span><strong>PTTT</strong> (Phương thức thanh toán) là loại hình từ góc nhìn khách hàng. <strong>Provider</strong> là cổng cụ thể xử lý. Cấu hình Provider ở tab <strong>Providers</strong>.</span>}
+        type="info" showIcon icon={<InfoCircleOutlined />} style={{ marginBottom: 20 }}
       />
 
-      <Card
-        title={<><CreditCardOutlined /> Đăng ký Phương Thức Thanh Toán (PTTT)</>}
-        style={{ marginBottom: 24 }}
-        extra={<Text type="secondary">Chọn loại hình thanh toán tenant muốn hỗ trợ</Text>}
-      >
+      <Card title={<><CreditCardOutlined /> Đăng ký PTTT theo Merchant</>} style={{ marginBottom: 24 }}>
         <Form form={form} layout="vertical" onFinish={handleSubmit} style={{ maxWidth: 620 }}>
+
+          {/* Tenant */}
           <Form.Item label="Tenant" name="tenantId" rules={[{ required: true }]}>
-            <Select placeholder="Chọn tenant" options={tenantOptions} loading={tenantLoading} />
+            <Select placeholder="Chọn tenant" options={tenantOptions} loading={tenantLoading} onChange={handleTenantChange} />
           </Form.Item>
 
+          {/* Merchant — cascade từ Tenant */}
           <Form.Item
-            label="Phương thức thanh toán"
-            name="methodTypes"
-            rules={[{ required: true, message: 'Chọn ít nhất 1 phương thức' }]}
+            label="Merchant (web/app)"
+            name="merchantCode"
+            rules={[{ required: true, message: 'Chọn merchant' }]}
+            extra="PTTT được đăng ký cho từng merchant (web/app) riêng biệt"
           >
             <Select
-              mode="multiple"
-              placeholder="Chọn loại hình thanh toán"
-              onChange={setSelectedTypes}
-              optionLabelProp="label"
-            >
+              placeholder={selectedTenant ? 'Chọn merchant' : 'Chọn tenant trước'}
+              options={merchantOptions}
+              loading={merchantLoading}
+              disabled={!selectedTenant}
+              onChange={(v) => handleMerchantChange(selectedTenant, v)}
+            />
+          </Form.Item>
+
+          {/* PTTT */}
+          <Form.Item label="Phương thức thanh toán" name="methodTypes" rules={[{ required: true, message: 'Chọn ít nhất 1' }]}>
+            <Select mode="multiple" placeholder="Chọn PTTT" onChange={setSelectedTypes} optionLabelProp="label">
               {METHOD_TYPES.map(opt => (
                 <Select.Option key={opt.value} value={opt.value} label={`${opt.icon} ${opt.label}`}>
-                  <div style={{ padding: '4px 0' }}>
-                    <Space>
-                      <span style={{ fontSize: 18 }}>{opt.icon}</span>
-                      <div>
-                        <Text strong>{opt.label}</Text>
-                        <br />
-                        <Text type="secondary" style={{ fontSize: 12 }}>{opt.description}</Text>
-                        <br />
-                        <Text style={{ fontSize: 11, color: '#1890ff' }}>
-                          Provider: {opt.providers.join(', ')}
-                        </Text>
-                      </div>
-                    </Space>
-                  </div>
+                  <Space>
+                    <span style={{ fontSize: 18 }}>{opt.icon}</span>
+                    <div>
+                      <Text strong>{opt.label}</Text>
+                      <div style={{ fontSize: 12, color: '#94a3b8' }}>{opt.description}</div>
+                    </div>
+                  </Space>
                 </Select.Option>
               ))}
             </Select>
           </Form.Item>
 
           {needsProvider && (
-            <Alert
-              message={
-                <span>
-                  Các phương thức đã chọn cần cấu hình Provider.
-                  Sau khi đăng ký, vào <strong>Provider Config</strong> để cấu hình ZaloPay/MoMo/VNPay.
-                </span>
-              }
-              type="warning"
-              showIcon
-              style={{ marginBottom: 16 }}
-            />
+            <Alert message="Các PTTT đã chọn cần cấu hình Provider. Vào tab Providers để cấu hình ZaloPay/MoMo/VNPay." type="warning" showIcon style={{ marginBottom: 16 }} />
           )}
-
           {selectedTypes.length > 1 && (
-            <Alert
-              message={`Split payment: Khách có thể kết hợp ${selectedTypes.length} phương thức trong 1 giao dịch`}
-              type="success"
-              showIcon
-              style={{ marginBottom: 16 }}
-            />
+            <Alert message={`Split payment: Khách có thể kết hợp ${selectedTypes.length} PTTT trong 1 giao dịch`} type="success" showIcon style={{ marginBottom: 16 }} />
           )}
 
           <Form.Item>
@@ -238,17 +178,22 @@ export default function PaymentMethodsPage() {
         </Form>
       </Card>
 
-      {registered.length > 0 && (
-        <Card title={`PTTT đã đăng ký (${registered.length})`}>
+      {/* Danh sách PTTT đã đăng ký */}
+      <Card
+        title={`PTTT đã đăng ký (${registered.length})`}
+        extra={selectedTenant && <Button icon={<ReloadOutlined />} size="small" onClick={() => handleMerchantChange(selectedTenant, form.getFieldValue('merchantCode'))}>Làm mới</Button>}
+      >
+        <Spin spinning={tableLoading}>
           <Table
             dataSource={registered}
             columns={columns}
-            rowKey={r => `${r.tenantId}-${r.methodType}`}
+            rowKey={r => `${r.tenantId}-${r.methodId}`}
             pagination={false}
             size="middle"
+            locale={{ emptyText: 'Chọn tenant và merchant để xem PTTT đã đăng ký' }}
           />
-        </Card>
-      )}
+        </Spin>
+      </Card>
     </div>
   )
 }

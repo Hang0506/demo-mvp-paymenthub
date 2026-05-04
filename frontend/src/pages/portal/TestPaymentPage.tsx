@@ -1,21 +1,28 @@
 import { useState, useEffect } from 'react'
-import { Card, Form, Input, InputNumber, Select, Button, Steps, Typography, Tag, Space, Alert, Divider, message } from 'antd'
-import { ThunderboltOutlined, LinkOutlined, CheckCircleOutlined, CopyOutlined } from '@ant-design/icons'
+import { Card, Form, Input, InputNumber, Select, Button, Steps, Typography, Tag, Space, Alert, message } from 'antd'
+import { ThunderboltOutlined, LinkOutlined, CheckCircleOutlined, CopyOutlined, ReloadOutlined } from '@ant-design/icons'
 import axios from 'axios'
 
-const { Text, Title } = Typography
+const { Text } = Typography
+
+// Generate unique order code mỗi lần
+const genOrderCode = () => `ORDER-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`
 
 export default function TestPaymentPage() {
   const [form] = Form.useForm()
-  const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<any>(null)
-  const [currentStep, setCurrentStep] = useState(0)
+  const [loading, setLoading]           = useState(false)
+  const [result, setResult]             = useState<any>(null)
+  const [currentStep, setCurrentStep]   = useState(0)
   const [tenantOptions, setTenantOptions] = useState<{value: string, label: string}[]>([])
   const [tenantLoading, setTenantLoading] = useState(false)
   const [merchantOptions, setMerchantOptions] = useState<{value: string, label: string, redirectUrl: string}[]>([])
   const [merchantLoading, setMerchantLoading] = useState(false)
 
-  useEffect(() => { loadTenants() }, [])
+  useEffect(() => {
+    loadTenants()
+    // Set unique order code khi mount
+    form.setFieldValue('orderCode', genOrderCode())
+  }, [])
 
   const loadTenants = async () => {
     setTenantLoading(true)
@@ -30,11 +37,9 @@ export default function TestPaymentPage() {
   }
 
   const handleTenantChange = async (tenantId: string) => {
-    // Reset merchant selection khi đổi tenant
     form.setFieldValue('merchantCode', undefined)
     setMerchantOptions([])
     if (!tenantId) return
-
     setMerchantLoading(true)
     try {
       const res = await axios.get(`/api/payment-tenants/${tenantId}/merchants`)
@@ -57,7 +62,7 @@ export default function TestPaymentPage() {
     try {
       const payload: any = {
         tenantId: values.tenantId,
-        orderCode: values.orderCode || `ORDER-${Date.now()}`,
+        orderCode: values.orderCode,   // luôn có — đã auto-gen
         amount: values.amount,
         currency: 'VND',
         customerInfo: {
@@ -65,8 +70,6 @@ export default function TestPaymentPage() {
           phone: values.customerPhone || '0901234567',
         },
       }
-
-      // Ưu tiên merchantCode nếu có, fallback returnUrl
       if (values.merchantCode) {
         payload.merchantCode = values.merchantCode
       } else {
@@ -84,19 +87,12 @@ export default function TestPaymentPage() {
     }
   }
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-    message.success('Copied!')
+  const handleReset = () => {
+    setResult(null)
+    setCurrentStep(0)
+    form.setFieldValue('orderCode', genOrderCode())  // gen code mới
   }
 
-  const openPaymentPage = () => {
-    if (result?.paymentUrl) {
-      window.open(result.paymentUrl, '_blank')
-      setCurrentStep(2)
-    }
-  }
-
-  // Lấy redirectUrl của merchant đang chọn để hiển thị preview
   const selectedMerchant = merchantOptions.find(m => m.value === form.getFieldValue('merchantCode'))
 
   return (
@@ -105,18 +101,20 @@ export default function TestPaymentPage() {
         current={currentStep}
         style={{ marginBottom: 24, background: '#fff', padding: '16px 24px', borderRadius: 8 }}
         items={[
-          { title: 'Create Payment', description: 'Fill order details' },
-          { title: 'Get Link', description: 'Copy payment URL' },
-          { title: 'Test Page', description: 'Open payment page' },
+          { title: 'Tạo Payment', description: 'Điền thông tin đơn hàng' },
+          { title: 'Lấy Link', description: 'Copy payment URL' },
+          { title: 'Test', description: 'Mở trang thanh toán' },
         ]}
       />
 
-      <Card title={<><ThunderboltOutlined /> Create Test Payment</>} style={{ marginBottom: 24 }}>
+      <Card title={<><ThunderboltOutlined /> Tạo Test Payment</>} style={{ marginBottom: 24 }}
+        extra={result && <Button icon={<ReloadOutlined />} onClick={handleReset}>Tạo mới</Button>}
+      >
         <Form form={form} layout="vertical" onFinish={handleCreate} style={{ maxWidth: 560 }}
           initialValues={{ amount: 150000, customerName: 'Nguyen Van A', customerPhone: '0901234567' }}>
 
           <Form.Item label="Tenant" name="tenantId" rules={[{ required: true }]}>
-            <Select options={tenantOptions} loading={tenantLoading} onChange={handleTenantChange} />
+            <Select options={tenantOptions} loading={tenantLoading} onChange={handleTenantChange} placeholder="Chọn tenant" />
           </Form.Item>
 
           <Form.Item
@@ -124,25 +122,32 @@ export default function TestPaymentPage() {
             name="merchantCode"
             extra={
               selectedMerchant
-                ? <Text type="secondary" style={{ fontSize: 12 }}>Redirect về: {selectedMerchant.redirectUrl}</Text>
+                ? <Text type="secondary" style={{ fontSize: 12 }}>↩ Redirect về: {selectedMerchant.redirectUrl}</Text>
                 : merchantOptions.length === 0 && !merchantLoading
-                  ? <Text type="warning" style={{ fontSize: 12 }}>Tenant chưa có merchant — sẽ dùng returnUrl mặc định</Text>
+                  ? <Text type="warning" style={{ fontSize: 12 }}>Tenant chưa có merchant — dùng returnUrl mặc định</Text>
                   : null
             }
           >
-            <Select
-              options={merchantOptions}
-              loading={merchantLoading}
-              placeholder="Chọn merchant (tuỳ chọn)"
-              allowClear
+            <Select options={merchantOptions} loading={merchantLoading} placeholder="Chọn merchant (tuỳ chọn)" allowClear />
+          </Form.Item>
+
+          <Form.Item
+            label="Order Code"
+            name="orderCode"
+            rules={[{ required: true }]}
+            extra="Tự động generate unique — có thể sửa"
+          >
+            <Input
+              suffix={
+                <ReloadOutlined
+                  style={{ cursor: 'pointer', color: '#667eea' }}
+                  onClick={() => form.setFieldValue('orderCode', genOrderCode())}
+                />
+              }
             />
           </Form.Item>
 
-          <Form.Item label="Order Code" name="orderCode">
-            <Input placeholder="Auto-generated if empty" />
-          </Form.Item>
-
-          <Form.Item label="Amount (VND)" name="amount" rules={[{ required: true }]}>
+          <Form.Item label="Số tiền (VND)" name="amount" rules={[{ required: true }]}>
             <InputNumber
               style={{ width: '100%' }}
               min={1000}
@@ -152,16 +157,17 @@ export default function TestPaymentPage() {
             />
           </Form.Item>
 
-          <Form.Item label="Customer Name" name="customerName">
-            <Input />
-          </Form.Item>
+          <Space style={{ width: '100%' }} size={12}>
+            <Form.Item label="Tên khách hàng" name="customerName" style={{ flex: 1, marginBottom: 0 }}>
+              <Input />
+            </Form.Item>
+            <Form.Item label="Số điện thoại" name="customerPhone" style={{ flex: 1, marginBottom: 0 }}>
+              <Input />
+            </Form.Item>
+          </Space>
 
-          <Form.Item label="Customer Phone" name="customerPhone">
-            <Input />
-          </Form.Item>
-
-          <Form.Item>
-            <Button type="primary" htmlType="submit" loading={loading} icon={<ThunderboltOutlined />} size="large">
+          <Form.Item style={{ marginTop: 16 }}>
+            <Button type="primary" htmlType="submit" loading={loading} icon={<ThunderboltOutlined />} size="large" disabled={!!result}>
               Generate Payment Link
             </Button>
           </Form.Item>
@@ -171,43 +177,34 @@ export default function TestPaymentPage() {
       {result && (
         <Card title={<><CheckCircleOutlined style={{ color: '#52c41a' }} /> Payment Created</>}>
           <Space direction="vertical" style={{ width: '100%' }} size="middle">
-            <div>
-              <Text type="secondary">Payment Code</Text>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-                <Tag color="blue" style={{ fontSize: 14, padding: '4px 12px' }}>{result.paymentRequestCode}</Tag>
+            <div style={{ display: 'flex', gap: 16 }}>
+              <div>
+                <Text type="secondary" style={{ fontSize: 12 }}>Payment Code</Text>
+                <div><Tag color="blue" style={{ fontSize: 13, padding: '3px 10px', marginTop: 4 }}>{result.paymentRequestCode}</Tag></div>
               </div>
             </div>
 
             <div>
-              <Text type="secondary">Payment URL</Text>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, background: '#f5f5f5', padding: '8px 12px', borderRadius: 6 }}>
-                <Text code style={{ flex: 1, wordBreak: 'break-all' }}>{result.paymentUrl}</Text>
-                <Button size="small" icon={<CopyOutlined />} onClick={() => copyToClipboard(result.paymentUrl)}>Copy</Button>
+              <Text type="secondary" style={{ fontSize: 12 }}>Payment URL</Text>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, background: '#f8fafc', padding: '10px 14px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                <Text style={{ flex: 1, wordBreak: 'break-all', fontSize: 13 }}>{result.paymentUrl}</Text>
+                <Button size="small" icon={<CopyOutlined />} onClick={() => { navigator.clipboard.writeText(result.paymentUrl); message.success('Copied!') }}>Copy</Button>
               </div>
             </div>
-
-            <Alert
-              message="Payment page is ready. Click below to open it and test the split payment flow."
-              type="success"
-              showIcon
-            />
 
             <Button
               type="primary"
               size="large"
               icon={<LinkOutlined />}
-              onClick={openPaymentPage}
+              onClick={() => { window.open(result.paymentUrl, '_blank'); setCurrentStep(2) }}
               block
+              style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', border: 'none', borderRadius: 10, height: 48 }}
             >
-              Open Payment Page →
+              Mở trang thanh toán →
             </Button>
 
             {currentStep >= 2 && (
-              <Alert
-                message="Payment page opened! Try selecting CASH + ZaloPay for split payment demo."
-                type="info"
-                showIcon
-              />
+              <Alert message="Trang thanh toán đã mở! Thử chọn CASH + ZaloPay để test split payment." type="info" showIcon />
             )}
           </Space>
         </Card>
