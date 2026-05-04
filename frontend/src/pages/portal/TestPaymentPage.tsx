@@ -21,7 +21,7 @@ export default function TestPaymentPage() {
     setTenantLoading(true)
     try {
       const res = await axios.get('/api/payment-tenants')
-      setTenantOptions(res.data.map((t: any) => ({ value: t.tenantId, label: t.tenantName || t.tenantId })))
+      setTenantOptions((res.data?.value ?? res.data ?? []).map((t: any) => ({ value: t.tenantId, label: t.tenantName || t.tenantId })))
     } catch {
       message.error('Không thể tải danh sách tenant')
     } finally {
@@ -39,7 +39,7 @@ export default function TestPaymentPage() {
     try {
       const res = await axios.get(`/api/payment-tenants/${tenantId}/merchants`)
       setMerchantOptions(
-        res.data.map((m: any) => ({
+        (res.data?.value ?? res.data ?? []).map((m: any) => ({
           value: m.merchantCode,
           label: `${m.merchantName} (${m.merchantCode})`,
           redirectUrl: m.redirectUrl,

@@ -69,7 +69,7 @@ export default function TenantsPage() {
     setTableLoading(true)
     try {
       const res = await axios.get('/api/payment-tenants')
-      const tenantList: Tenant[] = res.data
+      const tenantList: Tenant[] = res.data?.value ?? res.data ?? []
       const tenantsWithCount = await Promise.all(
         tenantList.map(async (tenant) => {
           try {
@@ -77,7 +77,9 @@ export default function TenantsPage() {
               axios.get(`/api/payment-tenants/${tenant.tenantId}/providers`),
               axios.get(`/api/payment-tenants/${tenant.tenantId}/merchants`),
             ])
-            return { ...tenant, providerCount: provRes.data.length, merchantCount: merRes.data.length }
+            const provList = provRes.data?.value ?? provRes.data ?? []
+            const merList  = merRes.data?.value  ?? merRes.data  ?? []
+            return { ...tenant, providerCount: provList.length, merchantCount: merList.length }
           } catch {
             return { ...tenant, providerCount: 0, merchantCount: 0 }
           }
@@ -123,8 +125,8 @@ export default function TenantsPage() {
         axios.get(`/api/payment-tenants/${tenant.tenantId}/providers`),
         axios.get(`/api/payment-tenants/${tenant.tenantId}/merchants`),
       ])
-      setProviderConfigs(provRes.data)
-      setMerchantApps(merRes.data)
+      setProviderConfigs(provRes.data?.value ?? provRes.data ?? [])
+      setMerchantApps(merRes.data?.value ?? merRes.data ?? [])
     } catch {
       message.error('Không thể tải dữ liệu')
     } finally {
@@ -154,7 +156,7 @@ export default function TenantsPage() {
       message.success('Cấu hình provider đã được thêm!')
       providerForm.resetFields()
       const res = await axios.get(`/api/payment-tenants/${selectedTenant.tenantId}/providers`)
-      setProviderConfigs(res.data)
+      setProviderConfigs(res.data?.value ?? res.data ?? [])
       loadTenants()
     } catch (err: any) {
       const msg = err.response?.data?.error?.message ?? 'Thêm provider thất bại'

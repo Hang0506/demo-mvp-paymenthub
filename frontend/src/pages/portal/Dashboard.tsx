@@ -36,8 +36,8 @@ export default function Dashboard() {
           axios.get('/api/payments'),
         ])
 
-        const tenants: any[] = tenantsRes.data ?? []
-        const payments: any[] = paymentsRes.data ?? []
+        const tenants: any[] = tenantsRes.data?.value ?? tenantsRes.data ?? []
+        const payments: any[] = paymentsRes.data?.value ?? paymentsRes.data ?? []
 
         // Tổng hợp payment methods và providers từ tất cả tenants
         let totalMethods = 0
@@ -48,8 +48,8 @@ export default function Dashboard() {
               axios.get(`/api/payment-tenants/${t.tenantId}/payment-methods`),
               axios.get(`/api/payment-tenants/${t.tenantId}/providers`),
             ])
-            totalMethods += (mRes.data?.length ?? 0)
-            totalProviders += (pRes.data?.length ?? 0)
+            totalMethods += ((mRes.data?.value ?? mRes.data ?? []).length ?? 0)
+            totalProviders += ((pRes.data?.value ?? pRes.data ?? []).length ?? 0)
           } catch {}
         }))
 

@@ -65,7 +65,7 @@ export default function ProvidersPage() {
     setTenantLoading(true)
     try {
       const res = await axios.get('/api/payment-tenants')
-      setTenantOptions(res.data.map((t: any) => ({ value: t.tenantId, label: t.tenantName || t.tenantId })))
+      setTenantOptions((res.data?.value ?? res.data ?? []).map((t: any) => ({ value: t.tenantId, label: t.tenantName || t.tenantId })))
     } catch {
       message.error('Không thể tải danh sách tenant')
     } finally {
