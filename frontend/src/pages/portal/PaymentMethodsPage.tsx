@@ -74,8 +74,12 @@ export default function PaymentMethodsPage() {
         const opt = METHOD_TYPES.find(m => m.value === type)!
         return { methodId: type, methodName: opt.label, enabled: true }
       })
-      await axios.post(`/api/payment-tenants/${values.tenantId}/payment-methods`, { methods })
-      message.success(`${methods.length} PTTT đã đăng ký cho ${values.tenantId}!`)
+      // Truyền merchantCode vào body — PTTT gắn với merchant cụ thể
+      await axios.post(`/api/payment-tenants/${values.tenantId}/payment-methods`, {
+        merchantCode: values.merchantCode,
+        methods,
+      })
+      message.success(`${methods.length} PTTT đã đăng ký cho merchant ${values.merchantCode}!`)
       form.resetFields(['methodTypes'])
       setSelectedTypes([])
       // Reload danh sách
@@ -104,6 +108,10 @@ export default function PaymentMethodsPage() {
           </Space>
         )
       },
+    },
+    {
+      title: 'Merchant', dataIndex: 'merchantCode', key: 'merchantCode',
+      render: (v: string) => v ? <Tag color="purple">{v}</Tag> : <Tag color="default">—</Tag>,
     },
     {
       title: 'Tenant', dataIndex: 'tenantId', key: 'tenantId',
