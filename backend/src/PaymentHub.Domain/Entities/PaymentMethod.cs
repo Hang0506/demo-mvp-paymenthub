@@ -12,24 +12,23 @@ public class PaymentMethod : AuditedEntity<Guid>
     public string TenantId { get; set; } = string.Empty;
 
     /// <summary>
-    /// Loại hình PTTT: CASH, E_WALLET, BANK_TRANSFER, CARD, QR_CODE
+    /// MerchantCode — PTTT gắn với merchant (web/app) cụ thể.
+    /// Null = áp dụng cho toàn tenant (legacy).
     /// </summary>
+    public string? MerchantCode { get; set; }
+
     public string MethodId { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Tên hiển thị: "Tiền mặt", "Ví điện tử", "Chuyển khoản"
-    /// </summary>
     public string MethodName { get; set; } = string.Empty;
-
     public string? IconUrl { get; set; }
     public bool Enabled { get; set; } = true;
     public int DisplayOrder { get; set; }
 
     protected PaymentMethod() { }
 
-    public PaymentMethod(Guid id, string tenantId, string methodId, string methodName) : base(id)
+    public PaymentMethod(Guid id, string tenantId, string methodId, string methodName, string? merchantCode = null) : base(id)
     {
         TenantId = tenantId;
+        MerchantCode = merchantCode;
         MethodId = methodId;
         MethodName = methodName;
         Enabled = true;

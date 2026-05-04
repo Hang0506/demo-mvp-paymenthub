@@ -9,6 +9,11 @@ public class CreateTenantRequest
 
 public class RegisterPaymentMethodsRequest
 {
+    /// <summary>
+    /// MerchantCode — đăng ký PTTT cho merchant cụ thể (web/app).
+    /// Bắt buộc theo flow: Tenant → Merchant → PTTT → Provider
+    /// </summary>
+    public string MerchantCode { get; set; } = string.Empty;
     public List<PaymentMethodRegistrationDto> Methods { get; set; } = new();
 }
 
@@ -43,6 +48,15 @@ public class ProviderConfigDto
     public string ProviderId { get; set; } = string.Empty;
     public string MerchantId { get; set; } = string.Empty;
     public string ApiKeyRef { get; set; } = string.Empty;
+    public bool Enabled { get; set; }
+}
+
+// PTTT response DTO — dùng cho GET /payment-tenants/{id}/payment-methods
+public class PaymentMethodListDto
+{
+    public string MethodId { get; set; } = string.Empty;
+    public string MethodName { get; set; } = string.Empty;
+    public string? MerchantCode { get; set; }
     public bool Enabled { get; set; }
 }
 

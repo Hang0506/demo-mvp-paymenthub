@@ -12,6 +12,7 @@ public interface ITenantAppService : IApplicationService
     // GET endpoints
     Task<List<TenantDto>> GetTenantsAsync();
     Task<List<PaymentMethodDto>> GetPaymentMethodsAsync(string tenantId);
+    Task<List<PaymentMethodListDto>> GetPaymentMethodsByMerchantAsync(string tenantId, string merchantCode);
     Task<List<ProviderConfigDto>> GetProvidersAsync(string tenantId);
 
     // Merchant endpoints

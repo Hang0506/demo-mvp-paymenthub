@@ -59,10 +59,10 @@ export default function PaymentMethodsPage() {
 
   const handleMerchantChange = async (tenantId: string, merchantCode: string) => {
     if (!tenantId || !merchantCode) return
-    // Load PTTT đã đăng ký của tenant (hiện tại API theo tenant, không theo merchant)
     setTableLoading(true)
     try {
-      const res = await axios.get(`/api/payment-tenants/${tenantId}/payment-methods`)
+      // Dùng endpoint mới: GET /payment-tenants/{id}/merchants/{code}/payment-methods
+      const res = await axios.get(`/api/payment-tenants/${tenantId}/merchants/${merchantCode}/payment-methods`)
       setRegistered((res.data?.value ?? res.data ?? []).map((m: any) => ({ ...m, tenantId, merchantCode })))
     } catch {} finally { setTableLoading(false) }
   }

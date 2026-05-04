@@ -56,6 +56,22 @@ public class TenantAppService : ApplicationService, ITenantAppService
         }).ToList();
     }
 
+    /// <summary>
+    /// Lấy PTTT theo merchant cụ thể.
+    /// Flow đúng: Tenant → Merchant → PTTT → Provider
+    /// </summary>
+    public async Task<List<PaymentMethodListDto>> GetPaymentMethodsByMerchantAsync(string tenantId, string merchantCode)
+    {
+        var methods = await _paymentMethodRepository.GetListAsync(
+            m => m.TenantId == tenantId && m.MerchantCode == merchantCode);
+        return methods.Select(m => new PaymentMethodListDto
+        {
+            MethodId     = m.MethodId,
+            MethodName   = m.MethodName,
+            MerchantCode = m.MerchantCode,
+            Enabled      = m.Enabled,
+        }).ToList();
+    }
     public async Task<List<ProviderConfigDto>> GetProvidersAsync(string tenantId)
     {
         var configs = await _providerConfigRepository.GetListAsync(p => p.TenantId == tenantId);
@@ -83,18 +99,21 @@ public class TenantAppService : ApplicationService, ITenantAppService
 
     public async Task<object> RegisterPaymentMethodsAsync(string tenantId, RegisterPaymentMethodsRequest request)
     {
-        var existing = await _paymentMethodRepository.GetListAsync(m => m.TenantId == tenantId);
+        // Xóa PTTT cũ của merchant này
+        var merchantCode = string.IsNullOrEmpty(request.MerchantCode) ? null : request.MerchantCode;
+        var existing = await _paymentMethodRepository.GetListAsync(
+            m => m.TenantId == tenantId && m.MerchantCode == merchantCode);
         foreach (var m in existing)
             await _paymentMethodRepository.DeleteAsync(m);
 
         foreach (var method in request.Methods)
         {
-            var pm = new PaymentMethod(GuidGenerator.Create(), tenantId, method.MethodId, method.MethodName);
+            var pm = new PaymentMethod(GuidGenerator.Create(), tenantId, method.MethodId, method.MethodName, merchantCode);
             pm.Enabled = method.Enabled;
             await _paymentMethodRepository.InsertAsync(pm);
         }
 
-        return new { TenantId = tenantId, Methods = request.Methods.Select(m => m.MethodId) };
+        return new { TenantId = tenantId, MerchantCode = merchantCode, Methods = request.Methods.Select(m => m.MethodId) };
     }
 
     public async Task<object> ConfigureProviderAsync(string tenantId, string providerId, ConfigureProviderRequest request)

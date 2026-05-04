@@ -45,11 +45,12 @@ public static class PaymentHubDbContextModelCreatingExtensions
             b.ConfigureByConvention();
             
             b.Property(x => x.TenantId).IsRequired().HasMaxLength(50);
+            b.Property(x => x.MerchantCode).HasMaxLength(100);
             b.Property(x => x.MethodId).IsRequired().HasMaxLength(50);
             b.Property(x => x.MethodName).IsRequired().HasMaxLength(200);
             b.Property(x => x.IconUrl).HasMaxLength(500);
             
-            b.HasIndex(x => new { x.TenantId, x.MethodId }).IsUnique();
+            b.HasIndex(x => new { x.TenantId, x.MerchantCode, x.MethodId }).IsUnique();
         });
 
         // ProviderConfig

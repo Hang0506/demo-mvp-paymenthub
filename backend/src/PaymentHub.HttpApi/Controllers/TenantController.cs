@@ -28,6 +28,14 @@ public class TenantController : AbpControllerBase
     public async Task<List<PaymentMethodDto>> GetPaymentMethodsAsync(string tenantId)
         => await _tenantAppService.GetPaymentMethodsAsync(tenantId);
 
+    /// <summary>
+    /// Lấy PTTT theo merchant — flow đúng: Tenant → Merchant → PTTT
+    /// GET /api/payment-tenants/{tenantId}/merchants/{merchantCode}/payment-methods
+    /// </summary>
+    [HttpGet("{tenantId}/merchants/{merchantCode}/payment-methods")]
+    public async Task<List<PaymentMethodListDto>> GetPaymentMethodsByMerchantAsync(string tenantId, string merchantCode)
+        => await _tenantAppService.GetPaymentMethodsByMerchantAsync(tenantId, merchantCode);
+
     [HttpPost("{tenantId}/payment-methods")]
     public async Task<object> RegisterPaymentMethodsAsync(string tenantId, RegisterPaymentMethodsRequest request)
         => await _tenantAppService.RegisterPaymentMethodsAsync(tenantId, request);
